@@ -53,12 +53,13 @@ def get_attendance(roll_number):
 
 @app.route('/attendance', methods=['GET'])
 def attendance():
-    roll_number = request.args.get('roll_number')
+    roll_number = request.args.get('rollno')  # Change to match frontend
     if not roll_number:
         return jsonify({"error": "Missing roll number"}), 400
     
     data = get_attendance(roll_number)
     return jsonify(data)
+
 
 # Vercel Handler
 def handler(event, context):
