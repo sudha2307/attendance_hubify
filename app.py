@@ -51,14 +51,24 @@ def get_attendance(roll_number):
     
     return {"attendance": attendance_details}
 
-@app.route('/attendance', methods=['GET'])
+@app.route('/attendance', methods=['POST'])
 def attendance():
-    roll_number = request.args.get('rollno')  # Change to match frontend
-    if not roll_number:
-        return jsonify({"error": "Missing roll number"}), 400
-    
-    data = get_attendance(roll_number)
-    return jsonify(data)
+    data = request.get_json()  # Get JSON request body
+    reg_no = data.get('reg_no') if data else None  # Extract 'reg_no' from JSON
+
+    if not reg_no:
+        return jsonify({"error": "Missing roll number"}), 400  # Handle missing roll number
+
+    try:
+        url = 'https://sadakath.ac.in/attend/attendance2.aspx'
+        viewstate, viewstate_generator, event_validation = fetch_hidden_fields(url)
+        attendance_details = get_attendance_details(url, reg_no, viewstate, viewstate_generator, event_validation)
+
+        return jsonify(attendance_details)  # Return JSON response
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500  # Handle exceptions properly
+
 
 
 # Vercel Handler
