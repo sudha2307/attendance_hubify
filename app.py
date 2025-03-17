@@ -1,51 +1,80 @@
-from flask import Flask, request, jsonify
 import requests
 from bs4 import BeautifulSoup
-from flask_cors import CORS
+from flask import Flask, request, jsonify
 
 app = Flask(__name__)
-CORS(app)
 
-def scrape_attendance(reg_no, year):
-    try:
-        if year == "1st year":
-            url = 'https://sadakath.ac.in/attend/attendance3.aspx'
-        else:
-            url = 'https://sadakath.ac.in/attend/attendance2.aspx'
+BASE_URL = "https://sadakath.ac.in/attend/attendance3.aspx"
 
-        data = {'regno': reg_no}
-        response = requests.post(url, data=data)
+def get_attendance(reg_no):
+    session = requests.Session()
+    
+    # Step 1: Get Initial Page to Extract Hidden Fields
+    response = session.get(BASE_URL)
+    if response.status_code != 200:
+        return {"error": "Failed to load attendance page"}
+    
+    soup = BeautifulSoup(response.text, 'html.parser')
+    
+    # Extract hidden fields required for form submission
+    viewstate = soup.find("input", {"id": "__VIEWSTATE"})["value"]
+    viewstategen = soup.find("input", {"id": "__VIEWSTATEGENERATOR"})["value"]
+    eventvalidation = soup.find("input", {"id": "__EVENTVALIDATION"})["value"]
+    
+    # Step 2: Submit Form with Registration Number
+    payload = {
+        "__VIEWSTATE": viewstate,
+        "__VIEWSTATEGENERATOR": viewstategen,
+        "__EVENTVALIDATION": eventvalidation,
+        "TxtRegno": reg_no,
+        "Button1": "Submit",
+    }
 
-        soup = BeautifulSoup(response.content, 'html.parser')
-        table = soup.find('table', {'id': 'ctl00_ContentPlaceHolder1_GridView1'})
+    post_response = session.post(BASE_URL, data=payload)
+    if post_response.status_code != 200:
+        return {"error": "Failed to fetch attendance details"}
+    
+    # Step 3: Parse the Response
+    soup = BeautifulSoup(post_response.text, 'html.parser')
 
-        records = []
-        if table:
-            rows = table.find_all('tr')[1:]  # Skip header
-            for row in rows:
-                cols = row.find_all('td')
-                record = {
-                    'CCode': cols[0].text.strip(),
-                    'SName': cols[1].text.strip(),
-                    'Total': cols[2].text.strip(),
-                    'Present': cols[3].text.strip(),
-                    'Absent': cols[4].text.strip(),
-                    'OD': cols[5].text.strip(),
-                    'Percentage': cols[6].text.strip()
-                }
-                records.append(record)
-        return records
-    except Exception as e:
-        print(f"Error: {e}")
-        return []
+    # Extract Student Name and Admin Number
+    admin_no = soup.find("span", {"id": "Label1"}).text.strip()
+    student_name = soup.find("span", {"id": "Label2"}).text.strip()
 
-@app.route('/attendance', methods=['POST'])
-def get_attendance():
-    data = request.json
-    reg_no = data.get('reg_no')
-    year = data.get('year')
-    records = scrape_attendance(reg_no, year)
-    return jsonify({'Records': records})
+    # Extract Attendance Data Table
+    table = soup.find("table", {"id": "GridView1"})
+    rows = table.find_all("tr")[1:]  # Skipping header row
+
+    attendance_records = []
+    for row in rows:
+        cols = [col.text.strip() for col in row.find_all("td")]
+        attendance_records.append({
+            "RegNo": cols[0],
+            "SubCode": cols[1],
+            "Total": cols[2],
+            "Present": cols[3],
+            "Absent": cols[4],
+            "OD": cols[5],
+            "Total_Present": cols[6],
+            "Present_Percentage": cols[7]
+        })
+
+    return {
+        "AdminNo": admin_no,
+        "Name": student_name,
+        "Attendance": attendance_records
+    }
+
+@app.route('/attendance_1st_year', methods=['POST'])
+def fetch_attendance():
+    data = request.get_json()
+    if not data or 'reg_no' not in data:
+        return jsonify({"error": "Missing registration number"}), 400
+    
+    reg_no = data['reg_no']
+    result = get_attendance(reg_no)
+    
+    return jsonify(result)
 
 if __name__ == '__main__':
     app.run(debug=True)
