@@ -1,8 +1,10 @@
 import requests
 from bs4 import BeautifulSoup
 from flask import Flask, request, jsonify
+from flask_cors import CORS  # Import CORS
 
 app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
 
 BASE_URL = "https://sadakath.ac.in/attend/attendance3.aspx"
 
@@ -65,8 +67,11 @@ def get_attendance(reg_no):
         "Attendance": attendance_records
     }
 
-@app.route('/attendance_1st_year', methods=['POST'])
+@app.route('/attendance_1st_year', methods=['POST', 'OPTIONS'])  # Support OPTIONS for CORS
 def fetch_attendance():
+    if request.method == 'OPTIONS':
+        return jsonify({"message": "CORS Preflight OK"}), 200  # Handle preflight request
+
     data = request.get_json()
     if not data or 'reg_no' not in data:
         return jsonify({"error": "Missing registration number"}), 400
